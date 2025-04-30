@@ -220,7 +220,7 @@ def main():
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
                         <span style='font-size:2em;'>{icon_total}</span><br>
-                        <b>Total Records</b><br>
+                        <b>Total Withdrawals</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{total_records:,}</span>
                     </div>
                 """, unsafe_allow_html=True)
@@ -228,7 +228,7 @@ def main():
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
                         <span style='font-size:2em;'>{icon_total}</span><br>
-                        <b>Total Withdrawal</b><br>
+                        <b>Total Amount Withdrawn (in PKR)</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{total_withdrawal:,.0f}</span>
                     </div>
                 """, unsafe_allow_html=True)
@@ -236,7 +236,7 @@ def main():
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
                         <span style='font-size:2em;'>{icon_total}</span><br>
-                        <b>Unique Records</b><br>
+                        <b>Total Withdrawing PLWs</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{unique_records:,}</span>
                     </div>
                 """, unsafe_allow_html=True)
