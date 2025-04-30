@@ -34,46 +34,37 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 is_streamlit_cloud = os.environ.get('STREAMLIT_SERVER_RUNNING', 'false').lower() == 'true'
 
 # Use only the filename, since the file is in the same directory as your script
-DAILY_REPORT_PATH = r"D:\PHCIP\Planning\Dataset\20250428\PHCIP_Saphhire_Reporting\30April439PMwithdrawal_reporting.xlsx"
-LEGACY_RECON_PATH = r"D:\PHCIP\Planning\Dataset\20250428\PHCIP_Saphhire_Reporting\30April440PM_Consolidated - BOP Balances (Eligible to be Shifted to ERP) 2025-04-25.xlsx"
+DAILY_REPORT_PATH = "30April439PMwithdrawal_reporting.xlsx"
+# LEGACY_RECON_PATH = "30April440PM_Consolidated_BOP_Balances.xlsx"  # Commented out legacy file
 
 # Cache the data loading to improve performance
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_data():
     try:
-        # Check if files exist
+        # Check if daily report file exists
         if not os.path.exists(DAILY_REPORT_PATH):
             st.error(f"Daily report file not found at: {DAILY_REPORT_PATH}")
             st.write("Available files:", os.listdir("."))
-            return None, None
-            
-        if not os.path.exists(LEGACY_RECON_PATH):
-            st.error(f"Legacy recon file not found at: {LEGACY_RECON_PATH}")
-            st.write("Available files:", os.listdir("."))
-            return None, None
+            return None
 
         # Load daily reporting data
         daily_df = pd.read_excel(DAILY_REPORT_PATH)
         
-        # Load legacy recon data
-        legacy_df = pd.read_excel(LEGACY_RECON_PATH)
-        
         # Basic data validation
-        if 'CNIC' not in daily_df.columns or 'MotherCNIC' not in legacy_df.columns:
-            raise ValueError("CNIC or MotherCNIC column not found in one or both datasets")
+        if 'CNIC' not in daily_df.columns:
+            raise ValueError("CNIC column not found in dataset")
         
         # Clean CNIC data
         daily_df['CNIC'] = daily_df['CNIC'].astype(str).str.strip()
-        legacy_df['MotherCNIC'] = legacy_df['MotherCNIC'].astype(str).str.strip()
         
-        return daily_df, legacy_df
+        return daily_df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         st.error("Full traceback:")
         st.code(traceback.format_exc())
-        return None, None
+        return None
 
-def process_data(daily_df, legacy_df):
+def process_data(daily_df):
     try:
         # Convert Transaction Time to datetime with correct format
         daily_df['Transaction Time'] = pd.to_datetime(
@@ -89,30 +80,7 @@ def process_data(daily_df, legacy_df):
         else:
             max_transaction_time_str = max_transaction_time.strftime('%Y-%m-%d')
         
-        # Merge dataframes on CNIC (daily) and MotherCNIC (legacy)
-        merged_df = pd.merge(
-            daily_df,
-            legacy_df[['MotherCNIC', 'Amount']],
-            left_on='CNIC',
-            right_on='MotherCNIC',
-            how='left',
-            suffixes=('', '_legacy')
-        )
-        
-        # Flag records as Legacy if MotherCNIC is present
-        merged_df['Status'] = merged_df.apply(
-            lambda row: 'Legacy' if pd.notnull(row['MotherCNIC']) else 'Non-Legacy',
-            axis=1
-        )
-        
-        # Add additional metrics (using Amount from legacy file)
-        merged_df['Balance_Category'] = pd.cut(
-            merged_df['Amount'].fillna(0),
-            bins=[-np.inf, 0, 1000, 5000, 10000, np.inf],
-            labels=['No Balance', 'Low', 'Medium', 'High', 'Very High']
-        )
-        
-        return merged_df, max_transaction_time_str
+        return daily_df, max_transaction_time_str
     except Exception as e:
         st.error(f"Error processing data: {str(e)}")
         return None, None
@@ -122,35 +90,34 @@ def create_visualizations(df):
     col1, col2 = st.columns(2)
     
     with col1:
-        # Status distribution pie chart
-        status_counts = df['Status'].value_counts()
-        fig_status = px.pie(
-            values=status_counts.values,
-            names=status_counts.index,
-            title='Distribution of Legacy vs Non-Legacy Records',
-            color_discrete_sequence=px.colors.qualitative.Set3
+        # Transaction distribution by date
+        daily_transactions = df.groupby(df['Transaction Time'].dt.date).size().reset_index(name='count')
+        fig_transactions = px.line(
+            daily_transactions,
+            x='Transaction Time',
+            y='count',
+            title='Daily Transaction Distribution',
+            labels={'count': 'Number of Transactions', 'Transaction Time': 'Date'}
         )
-        st.plotly_chart(fig_status, use_container_width=True)
+        st.plotly_chart(fig_transactions, use_container_width=True)
     
     with col2:
-        # Balance category distribution
-        balance_counts = df['Balance_Category'].value_counts()
-        fig_balance = px.bar(
-            x=balance_counts.index,
-            y=balance_counts.values,
-            title='Distribution of Balance (JC) Categories',
-            labels={'x': 'Balance Category', 'y': 'Count'},
-            color_discrete_sequence=px.colors.qualitative.Set3
+        # Withdrawal amount distribution
+        fig_withdrawal = px.histogram(
+            df,
+            x='Withdrawal Amount',
+            title='Withdrawal Amount Distribution',
+            labels={'Withdrawal Amount': 'Amount', 'count': 'Frequency'}
         )
-        st.plotly_chart(fig_balance, use_container_width=True)
+        st.plotly_chart(fig_withdrawal, use_container_width=True)
 
 def main():
     # Load data
-    daily_df, legacy_df = load_data()
+    daily_df = load_data()
     
-    if daily_df is not None and legacy_df is not None:
+    if daily_df is not None:
         # Process data
-        processed_df, max_transaction_time_str = process_data(daily_df, legacy_df)
+        processed_df, max_transaction_time_str = process_data(daily_df)
         
         if processed_df is not None:
             # --- SIDEBAR FILTERS (flat, clean, professional) ---
@@ -196,27 +163,6 @@ def main():
                 st.sidebar.error("From date must be before To date.")
             st.sidebar.markdown("<hr style='margin:0.5em 0 0.5em 0;border:0;border-top:1px solid #e1e4e8;'>", unsafe_allow_html=True)
 
-            # Status
-            st.sidebar.markdown("<div style='font-size:0.97em;font-weight:600;color:#24527a;margin-bottom:2px;'>🗂️ Status</div>", unsafe_allow_html=True)
-            status_options = ['All'] + processed_df['Status'].unique().tolist()
-            status_filter = st.sidebar.selectbox(" ", status_options, key="status_filter")
-
-            # Legacy Balance (was Balance Category)
-            st.sidebar.markdown("<div style='font-size:0.97em;font-weight:600;color:#24527a;margin-bottom:2px;margin-top:0.5em;'>💰 Legacy Balance</div>", unsafe_allow_html=True)
-            # Define display options with ranges, in correct order
-            balance_category_order = ['No Balance', 'Low', 'Medium', 'High', 'Very High']
-            balance_category_labels = {
-                'No Balance': 'No Balance (0)',
-                'Low': 'Low (1-1,000)',
-                'Medium': 'Medium (1,001-5,000)',
-                'High': 'High (5,001-10,000)',
-                'Very High': 'Very High (10,001+)',
-            }
-            # Only include categories present in the data, but in the correct order
-            present_cats = [cat for cat in balance_category_order if cat in processed_df['Balance_Category'].unique()]
-            balance_options = ['All'] + [balance_category_labels[cat] for cat in present_cats]
-            balance_filter = st.sidebar.selectbox("  ", balance_options, key="balance_filter")
-
             # District
             st.sidebar.markdown("<div style='font-size:0.97em;font-weight:600;color:#24527a;margin-bottom:2px;margin-top:0.5em;'>📍 District</div>", unsafe_allow_html=True)
             district_list = processed_df['District Name'].fillna('Blank').unique().tolist()
@@ -236,12 +182,6 @@ def main():
                 (display_df['Transaction Time'].dt.date >= from_date) &
                 (display_df['Transaction Time'].dt.date <= to_date)
             ]
-            # Status filter
-            if status_filter != 'All':
-                display_df = display_df[display_df['Status'] == status_filter]
-            # Balance Category filter
-            if balance_filter != 'All':
-                display_df = display_df[display_df['Balance_Category'] == balance_filter]
             # District filter
             if district_filter != 'All':
                 if district_filter == 'Blank':
@@ -265,22 +205,17 @@ def main():
                 </h1>
             """, unsafe_allow_html=True)
 
-            # --- SUMMARY STATISTICS (Four Rows) ---
+            # --- SUMMARY STATISTICS (Two Rows) ---
             st.subheader("Summary Statistics")
             color_total = "#3498db"
-            color_legacy = "#27ae60"
-            color_nonlegacy = "#e67e22"
-            color_file = "#8e44ad"
             icon_total = "📋"
-            icon_legacy = "🟢"
-            icon_nonlegacy = "🟠"
-            icon_file = "📁"
 
             # First row
             col1, col2, col3 = st.columns(3)
             total_records = len(display_df)
-            legacy_records = len(display_df[display_df['Status'] == 'Legacy'])
-            nonlegacy_records = len(display_df[display_df['Status'] == 'Non-Legacy'])
+            total_withdrawal = display_df['Withdrawal Amount'].sum()
+            unique_records = display_df['CNIC'].nunique()
+            
             with col1:
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
@@ -291,108 +226,18 @@ def main():
                 """, unsafe_allow_html=True)
             with col2:
                 st.markdown(f"""
-                    <div style='background:{color_legacy};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_legacy}</span><br>
-                        <b>Legacy Records</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{legacy_records:,}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            with col3:
-                st.markdown(f"""
-                    <div style='background:{color_nonlegacy};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_nonlegacy}</span><br>
-                        <b>Non-Legacy Records</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{nonlegacy_records:,}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-
-            # Second row
-            col4, col5, col6 = st.columns(3)
-            unique_records = display_df['CNIC'].nunique()
-            legacy_unique_records = display_df[display_df['Status'] == 'Legacy']['CNIC'].nunique()
-            nonlegacy_unique_records = display_df[display_df['Status'] == 'Non-Legacy']['CNIC'].nunique()
-            with col4:
-                st.markdown(f"""
-                    <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_total}</span><br>
-                        <b>Unique Records</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{unique_records:,}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            with col5:
-                st.markdown(f"""
-                    <div style='background:{color_legacy};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_legacy}</span><br>
-                        <b>Legacy Unique Records</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{legacy_unique_records:,}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            with col6:
-                st.markdown(f"""
-                    <div style='background:{color_nonlegacy};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_nonlegacy}</span><br>
-                        <b>Non-Legacy Unique Records</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{nonlegacy_unique_records:,}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-
-            # Third row
-            col7, col8, col9 = st.columns(3)
-            legacy_withdrawal = display_df.loc[display_df['Status'] == 'Legacy', 'Withdrawal Amount'].sum()
-            nonlegacy_withdrawal = display_df.loc[display_df['Status'] == 'Non-Legacy', 'Withdrawal Amount'].sum()
-            total_withdrawal = display_df['Withdrawal Amount'].sum()
-            with col7:
-                st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
                         <span style='font-size:2em;'>{icon_total}</span><br>
                         <b>Total Withdrawal</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{total_withdrawal:,.0f}</span>
                     </div>
                 """, unsafe_allow_html=True)
-            with col8:
+            with col3:
                 st.markdown(f"""
-                    <div style='background:{color_legacy};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_legacy}</span><br>
-                        <b>Legacy Withdrawal</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{legacy_withdrawal:,.0f}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            with col9:
-                st.markdown(f"""
-                    <div style='background:{color_nonlegacy};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_nonlegacy}</span><br>
-                        <b>Non-Legacy Withdrawal</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{nonlegacy_withdrawal:,.0f}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-
-            # Fourth row (from legacy file for comparison)
-            total_legacy_records_file = len(legacy_df)
-            legacy_total_amount_file = legacy_df['Amount'].sum()
-            legacy_balance_remaining = legacy_total_amount_file - legacy_withdrawal
-            col10, col11, col12 = st.columns(3)
-            with col10:
-                st.markdown(f"""
-                    <div style='background:{color_file};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_file}</span><br>
-                        <b>Total Legacy Records</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{total_legacy_records_file:,}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            with col11:
-                st.markdown(f"""
-                    <div style='background:{color_file};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_file}</span><br>
-                        <b>Legacy Balance</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{legacy_total_amount_file:,.0f}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            with col12:
-                st.markdown(f"""
-                    <div style='background:{color_file};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_file}</span><br>
-                        <b>Legacy Balance Remaining</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{legacy_balance_remaining:,.0f}</span>
+                    <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
+                        <span style='font-size:2em;'>{icon_total}</span><br>
+                        <b>Unique Records</b><br>
+                        <span style='font-size:2em;font-weight:bold;'>{unique_records:,}</span>
                     </div>
                 """, unsafe_allow_html=True)
 
@@ -406,7 +251,7 @@ def main():
             missing_coords_unique = display_df[missing_coords_mask]['CNIC'].nunique() if missing_coords_mask is not None and 'CNIC' in display_df.columns else 0
             # Count missing CNICs
             missing_cnic_count = display_df['CNIC'].isna().sum() if 'CNIC' in display_df.columns else 0
-            # Removed district/location mismatch check
+            
             red_flag_msgs = []
             if blank_districts_count > 0:
                 red_flag_msgs.append(f"<b>{blank_districts_count}</b> record(s) have <b>Blank District</b> (affecting <b>{blank_districts_unique}</b> unique CNICs).")
@@ -414,7 +259,6 @@ def main():
                 red_flag_msgs.append(f"<b>{missing_coords_count}</b> record(s) have <b>missing coordinates</b> (affecting <b>{missing_coords_unique}</b> unique CNICs).")
             if missing_cnic_count > 0:
                 red_flag_msgs.append(f"<b>{missing_cnic_count}</b> record(s) have <b>missing CNIC</b>.")
-            # Removed District/Location Mismatch message
             if not red_flag_msgs:
                 red_flag_msgs.append("<b>No major data issues detected.</b>")
 
@@ -426,10 +270,10 @@ def main():
                 + "</div>"
             , unsafe_allow_html=True)
 
-            # --- DAILY WITHDRAWAL TRENDS TABLE (Styled to Match Image, Full Width, Before Map) ---
+            # --- DAILY WITHDRAWAL TRENDS TABLE ---
             st.markdown("""
                 <div style='background: #ffe600; color: #222; font-weight: bold; font-size: 1.3em; text-align: center; border-radius: 4px; padding: 6px 0 2px 0; margin-bottom: 0;'>
-                    DAILY WITHDRAWAL TRENDS SINCE JC ONBOARD
+                    DAILY WITHDRAWAL TRENDS
                 </div>
             """, unsafe_allow_html=True)
             trends_df = processed_df.copy()
@@ -541,7 +385,6 @@ def main():
                 hover_name='District Name' if 'District Name' in map_df.columns else None,
                 hover_data={
                     'CNIC': True,
-                    'Status': True,
                     'Device Accuracy': True,
                     'District Name': True if 'District Name' in map_df.columns else False,
                 },
