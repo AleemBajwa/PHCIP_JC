@@ -208,7 +208,7 @@ def main():
             # --- SUMMARY STATISTICS (Two Rows) ---
             st.subheader("Summary Statistics")
             color_total = "#3498db"
-            icon_visits = "🚶‍♂️"  # Depicts visits
+            icon_visits = "🛺"  # Rickshaw for visits
             icon_females = "👩‍👩‍👧‍👧"  # Multiple females
             icon_currency = "💸"  # Currency
 
@@ -287,19 +287,19 @@ def main():
             daily = daily.sort_values('Date', key=lambda x: pd.to_datetime(x, format='%d-%b'))
             daily['% of Increase'] = daily['Withdrawal Amount'].pct_change().fillna(0).apply(lambda x: f"{x*100:.0f}%" if x != 0 else '-')
             daily['Avg. Wtdr/PLW'] = (daily['Withdrawal Amount'] / daily['# of PLWs']).round(0).astype(int)
-            # Format numbers (except for percentages and dates)
-            daily['# of PLWs'] = daily['# of PLWs'].apply(lambda x: f"{int(x):,}")
-            daily['Withdrawal Amount'] = daily['Withdrawal Amount'].apply(lambda x: f"{int(str(x).replace(',', '')):,}")
-            daily['Avg. Wtdr/PLW'] = daily['Avg. Wtdr/PLW'].apply(lambda x: f"{int(str(x).replace(',', '')):,}")
-            # Grand Total row
+            # Grand Total row (keep as int for now)
             grand_total = pd.DataFrame({
                 'Date': ['Grand Total'],
                 '# of PLWs': [daily['# of PLWs'].astype(int).sum()],
-                'Withdrawal Amount': [f"{processed_df['Withdrawal Amount'].sum():,}"],
+                'Withdrawal Amount': [processed_df['Withdrawal Amount'].sum()],
                 '% of Increase': ['-'],
-                'Avg. Wtdr/PLW': [f"{int(processed_df['Withdrawal Amount'].sum()/daily['# of PLWs'].astype(int).sum()):,}"]
+                'Avg. Wtdr/PLW': [int(processed_df['Withdrawal Amount'].sum()/daily['# of PLWs'].astype(int).sum())]
             })
             daily = pd.concat([daily, grand_total], ignore_index=True)
+            # Format numbers (except for percentages and dates) AFTER concat
+            daily['# of PLWs'] = daily['# of PLWs'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
+            daily['Withdrawal Amount'] = daily['Withdrawal Amount'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
+            daily['Avg. Wtdr/PLW'] = daily['Avg. Wtdr/PLW'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
             # Style table
             def highlight_header(s):
                 return ['background-color: #ffe600; color: #222; font-weight: bold; text-align: center;' for _ in s]
