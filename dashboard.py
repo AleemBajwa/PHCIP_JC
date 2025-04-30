@@ -208,9 +208,9 @@ def main():
             # --- SUMMARY STATISTICS (Two Rows) ---
             st.subheader("Summary Statistics")
             color_total = "#3498db"
-            icon_visits = "🛺"  # Rickshaw for visits
-            icon_females = "👩‍👩‍👧‍👧"  # Multiple females
-            icon_currency = "💸"  # Currency
+            icon_withdrawals = "🛺"  # Rickshaw
+            icon_amount = "💸"  # Currency/money
+            icon_plws = "👩‍👩‍👧‍👧"  # Multiple females
 
             # First row
             col1, col2, col3 = st.columns(3)
@@ -221,7 +221,7 @@ def main():
             with col1:
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_visits}</span><br>
+                        <span style='font-size:2em;'>{icon_withdrawals}</span><br>
                         <b>Total Successful Withdrawals (By PLW Visits)</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{total_records:,}</span>
                     </div>
@@ -229,7 +229,7 @@ def main():
             with col2:
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_females}</span><br>
+                        <span style='font-size:2em;'>{icon_plws}</span><br>
                         <b>Total Withdrawing PLWs</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{unique_records:,}</span>
                     </div>
@@ -237,7 +237,7 @@ def main():
             with col3:
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_currency}</span><br>
+                        <span style='font-size:2em;'>{icon_amount}</span><br>
                         <b>Total Amount Withdrawn (in PKR)</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{total_withdrawal:,.0f}</span>
                     </div>
@@ -287,35 +287,40 @@ def main():
             daily = daily.sort_values('Date', key=lambda x: pd.to_datetime(x, format='%d-%b'))
             daily['% of Increase'] = daily['Withdrawal Amount'].pct_change().fillna(0).apply(lambda x: f"{x*100:.0f}%" if x != 0 else '-')
             daily['Avg. Wtdr/PLW'] = (daily['Withdrawal Amount'] / daily['# of PLWs']).round(0).astype(int)
-            # Grand Total row (keep as int for now)
+            # Format numbers
+            daily['Withdrawal Amount'] = daily['Withdrawal Amount'].apply(lambda x: f"{x:,.0f}")
+            daily['Avg. Wtdr/PLW'] = daily['Avg. Wtdr/PLW'].apply(lambda x: f"{x:,}")
+            # Grand Total row
             grand_total = pd.DataFrame({
                 'Date': ['Grand Total'],
                 '# of PLWs': [daily['# of PLWs'].astype(int).sum()],
-                'Withdrawal Amount': [processed_df['Withdrawal Amount'].sum()],
+                'Withdrawal Amount': [f"{processed_df['Withdrawal Amount'].sum():,}"],
                 '% of Increase': ['-'],
-                'Avg. Wtdr/PLW': [int(processed_df['Withdrawal Amount'].sum()/daily['# of PLWs'].astype(int).sum())]
+                'Avg. Wtdr/PLW': [f"{int(processed_df['Withdrawal Amount'].sum()/daily['# of PLWs'].astype(int).sum()):,}"]
             })
             daily = pd.concat([daily, grand_total], ignore_index=True)
+            # Style table
+            def highlight_header(s):
+                return ['background-color: #ffe600; color: #222; font-weight: bold; text-align: center;' for _ in s]
+            def highlight_grand_total(row):
+                if row['Date'] == 'Grand Total':
+                    return ['background-color: #b3d7f7; font-weight: bold; color: #222;' for _ in row]
+                else:
+                    return ['background-color: #ffe600;' for _ in row]
+            styled = daily.style.apply(highlight_header, axis=0).apply(highlight_grand_total, axis=1)
+            st.markdown(f"<div style='width:100%;'>" + styled.to_html(index=False, escape=False) + "</div>", unsafe_allow_html=True)
 
             # --- SUMMARY STATS BELOW TABLE ---
-            # Use only the rows that are not '18-Apr' or 'Grand Total' for averages
             daily_for_avg = daily[~daily['Date'].isin(['18-Apr', 'Grand Total'])].copy()
-            # Convert to int for calculations (they are not formatted yet)
-            highest_plws = daily_for_avg['# of PLWs'].max()
-            highest_withdrawal = daily_for_avg['Withdrawal Amount'].max()
-            avg_plws = int(daily_for_avg['# of PLWs'].mean())
-            avg_withdrawal = int(daily_for_avg['Withdrawal Amount'].mean())
-
-            # Format numbers (except for percentages and dates) AFTER all calculations
-            daily['# of PLWs'] = daily['# of PLWs'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
-            daily['Withdrawal Amount'] = daily['Withdrawal Amount'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
-            daily['Avg. Wtdr/PLW'] = daily['Avg. Wtdr/PLW'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
-
+            highest_plws = daily_for_avg['# of PLWs'].astype(int).max()
+            highest_withdrawal = daily_for_avg['Withdrawal Amount'].apply(lambda x: int(x.replace(',', ''))).max()
+            avg_plws = int(daily_for_avg['# of PLWs'].astype(int).mean())
+            avg_withdrawal = int(daily_for_avg['Withdrawal Amount'].apply(lambda x: int(x.replace(',', ''))).mean())
             st.markdown(f"""
                 <div style='font-size:1.1em; margin-top: 0.5em;'>
-                <b>*Highest number of PLWs performing withdrawals in a day</b>&nbsp;&nbsp;&nbsp;{highest_plws:,}<br>
+                <b>*Highest number of PLWs performing withdrawals in a day</b>&nbsp;&nbsp;&nbsp;{highest_plws}<br>
                 <b>*Highest withdrawal amount in a single day</b>&nbsp;&nbsp;&nbsp;{highest_withdrawal:,}<br>
-                <b>*Average number of PLWs per day coming for withdrawals</b>&nbsp;&nbsp;&nbsp;{avg_plws:,}<br>
+                <b>*Average number of PLWs per day coming for withdrawals</b>&nbsp;&nbsp;&nbsp;{avg_plws}<br>
                 <b>*Average amount withdrawn per day</b>&nbsp;&nbsp;&nbsp;{avg_withdrawal:,}<br>
                 </div>
             """, unsafe_allow_html=True)
