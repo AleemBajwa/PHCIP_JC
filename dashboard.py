@@ -296,32 +296,26 @@ def main():
                 'Avg. Wtdr/PLW': [int(processed_df['Withdrawal Amount'].sum()/daily['# of PLWs'].astype(int).sum())]
             })
             daily = pd.concat([daily, grand_total], ignore_index=True)
-            # Format numbers (except for percentages and dates) AFTER concat
+
+            # --- SUMMARY STATS BELOW TABLE ---
+            # Use only the rows that are not '18-Apr' or 'Grand Total' for averages
+            daily_for_avg = daily[~daily['Date'].isin(['18-Apr', 'Grand Total'])].copy()
+            # Convert to int for calculations (they are not formatted yet)
+            highest_plws = daily_for_avg['# of PLWs'].max()
+            highest_withdrawal = daily_for_avg['Withdrawal Amount'].max()
+            avg_plws = int(daily_for_avg['# of PLWs'].mean())
+            avg_withdrawal = int(daily_for_avg['Withdrawal Amount'].mean())
+
+            # Format numbers (except for percentages and dates) AFTER all calculations
             daily['# of PLWs'] = daily['# of PLWs'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
             daily['Withdrawal Amount'] = daily['Withdrawal Amount'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
             daily['Avg. Wtdr/PLW'] = daily['Avg. Wtdr/PLW'].apply(lambda x: f"{int(str(x).replace(',', '')):,}" if str(x).replace(',', '').isdigit() else x)
-            # Style table
-            def highlight_header(s):
-                return ['background-color: #ffe600; color: #222; font-weight: bold; text-align: center;' for _ in s]
-            def highlight_grand_total(row):
-                if row['Date'] == 'Grand Total':
-                    return ['background-color: #b3d7f7; font-weight: bold; color: #222;' for _ in row]
-                else:
-                    return ['background-color: #ffe600;' for _ in row]
-            styled = daily.style.apply(highlight_header, axis=0).apply(highlight_grand_total, axis=1)
-            st.markdown(f"<div style='width:100%;'>" + styled.to_html(index=False, escape=False) + "</div>", unsafe_allow_html=True)
 
-            # --- SUMMARY STATS BELOW TABLE ---
-            daily_for_avg = daily[~daily['Date'].isin(['18-Apr', 'Grand Total'])].copy()
-            highest_plws = daily_for_avg['# of PLWs'].astype(int).max()
-            highest_withdrawal = daily_for_avg['Withdrawal Amount'].apply(lambda x: int(x.replace(',', ''))).max()
-            avg_plws = int(daily_for_avg['# of PLWs'].astype(int).mean())
-            avg_withdrawal = int(daily_for_avg['Withdrawal Amount'].apply(lambda x: int(x.replace(',', ''))).mean())
             st.markdown(f"""
                 <div style='font-size:1.1em; margin-top: 0.5em;'>
-                <b>*Highest number of PLWs performing withdrawals in a day</b>&nbsp;&nbsp;&nbsp;{highest_plws}<br>
+                <b>*Highest number of PLWs performing withdrawals in a day</b>&nbsp;&nbsp;&nbsp;{highest_plws:,}<br>
                 <b>*Highest withdrawal amount in a single day</b>&nbsp;&nbsp;&nbsp;{highest_withdrawal:,}<br>
-                <b>*Average number of PLWs per day coming for withdrawals</b>&nbsp;&nbsp;&nbsp;{avg_plws}<br>
+                <b>*Average number of PLWs per day coming for withdrawals</b>&nbsp;&nbsp;&nbsp;{avg_plws:,}<br>
                 <b>*Average amount withdrawn per day</b>&nbsp;&nbsp;&nbsp;{avg_withdrawal:,}<br>
                 </div>
             """, unsafe_allow_html=True)
