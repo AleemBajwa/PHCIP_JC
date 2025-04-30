@@ -208,7 +208,9 @@ def main():
             # --- SUMMARY STATISTICS (Two Rows) ---
             st.subheader("Summary Statistics")
             color_total = "#3498db"
-            icon_total = "📋"
+            icon_visits = "🚶‍♂️"  # Depicts visits
+            icon_females = "👩‍👩‍👧‍👧"  # Multiple females
+            icon_currency = "💸"  # Currency
 
             # First row
             col1, col2, col3 = st.columns(3)
@@ -219,7 +221,7 @@ def main():
             with col1:
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_total}</span><br>
+                        <span style='font-size:2em;'>{icon_visits}</span><br>
                         <b>Total Successful Withdrawals (By PLW Visits)</b><br>
                         <span style='font-size:2em;font-weight:bold;'>{total_records:,}</span>
                     </div>
@@ -227,17 +229,17 @@ def main():
             with col2:
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_total}</span><br>
-                        <b>Total Amount Withdrawn (in PKR)</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{total_withdrawal:,.0f}</span>
+                        <span style='font-size:2em;'>{icon_females}</span><br>
+                        <b>Total Withdrawing PLWs</b><br>
+                        <span style='font-size:2em;font-weight:bold;'>{unique_records:,}</span>
                     </div>
                 """, unsafe_allow_html=True)
             with col3:
                 st.markdown(f"""
                     <div style='background:{color_total};padding:18px 0 10px 0;border-radius:10px;text-align:center;color:white;'>
-                        <span style='font-size:2em;'>{icon_total}</span><br>
-                        <b>Total Withdrawing PLWs</b><br>
-                        <span style='font-size:2em;font-weight:bold;'>{unique_records:,}</span>
+                        <span style='font-size:2em;'>{icon_currency}</span><br>
+                        <b>Total Amount Withdrawn (in PKR)</b><br>
+                        <span style='font-size:2em;font-weight:bold;'>{total_withdrawal:,.0f}</span>
                     </div>
                 """, unsafe_allow_html=True)
 
@@ -285,9 +287,10 @@ def main():
             daily = daily.sort_values('Date', key=lambda x: pd.to_datetime(x, format='%d-%b'))
             daily['% of Increase'] = daily['Withdrawal Amount'].pct_change().fillna(0).apply(lambda x: f"{x*100:.0f}%" if x != 0 else '-')
             daily['Avg. Wtdr/PLW'] = (daily['Withdrawal Amount'] / daily['# of PLWs']).round(0).astype(int)
-            # Format numbers
-            daily['Withdrawal Amount'] = daily['Withdrawal Amount'].apply(lambda x: f"{x:,.0f}")
-            daily['Avg. Wtdr/PLW'] = daily['Avg. Wtdr/PLW'].apply(lambda x: f"{x:,}")
+            # Format numbers (except for percentages and dates)
+            daily['# of PLWs'] = daily['# of PLWs'].apply(lambda x: f"{int(x):,}")
+            daily['Withdrawal Amount'] = daily['Withdrawal Amount'].apply(lambda x: f"{int(str(x).replace(',', '')):,}")
+            daily['Avg. Wtdr/PLW'] = daily['Avg. Wtdr/PLW'].apply(lambda x: f"{int(str(x).replace(',', '')):,}")
             # Grand Total row
             grand_total = pd.DataFrame({
                 'Date': ['Grand Total'],
